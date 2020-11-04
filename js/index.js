@@ -20,17 +20,12 @@ camera.position.y = 200;
 var texture = new THREE.TextureLoader().load("./../texture/téléchargement.jpg");
 
 let Murs = []
+let Tower = []
 
-
-var geometry = new THREE.BoxBufferGeometry(100, 300, 2000);
-var material = new THREE.MeshBasicMaterial({ map: texture })
-let mur = new THREE.Mesh(geometry, material)
-
-Murs.push(mur)
-
-geometry = new THREE.BoxBufferGeometry(100, 300, 1000);
-mur = new THREE.Mesh(geometry, material)
-Murs.push(mur)
+Tower.push(createTower(150,500,150))
+Tower.push(createTower(120,400,150))
+Murs.push(createWall(100,2000,300))
+Murs.push(createWall(100,1000,300))
 
 let tour = new THREE.Group()
 
@@ -38,14 +33,16 @@ Murs.forEach((elem) => {
   tour.add(elem);
 })
 
+Tower.forEach((tower) => {
+  tour.add(tower)
+})
 
-let toure = createTower(150,500,150)
-let toure2 = createTower(120,400,150)
+//let toure = createTower(150,500,150)
+//let toure2 = createTower(120,400,150)
 
 
-
-tour.add(toure);
-tour.add(toure2)
+// tour.add(toure);
+// tour.add(toure2)
 
 scene.add(tour)
 
@@ -56,7 +53,7 @@ Murs[1].position.set(500, 150, 2000 + 120/2)
 Murs[1].rotateY(THREE.Math.degToRad(90))
 
 
-toure2.position.z = 2000 + 120/2;
+Tower[1].position.z = 2000 + 120/2;
 
 renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -80,6 +77,11 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+function createWall(largeur, longeur, hauteur) {
+  var geometry = new THREE.BoxBufferGeometry(largeur, hauteur, longeur);
+var material = new THREE.MeshBasicMaterial({ map: texture })
+let mur = new THREE.Mesh(geometry, material)
+}
 
 function createTower(largeur, hauteurCylindre, hauteurCone) {
   var texture = new THREE.TextureLoader().load("./../texture/téléchargement.jpg");
