@@ -1,5 +1,6 @@
 import * as THREE from "./three.js-master/build/three.module.js";
 import { OrbitControls } from './three.js-master/examples/jsm/controls/OrbitControls.js';
+import { GUI } from './three.js-master/examples/jsm/libs/dat.gui.module.js';
 import {SVGLoader} from "./three.js-master/examples/jsm/loaders/SVGLoader.js";
 
 var camera, scene, renderer;
@@ -11,18 +12,30 @@ camera = new THREE.PerspectiveCamera(
   100,
   window.innerWidth / window.innerHeight,
   1,
-  10000
+  110000
 );
 camera.position.z = 2000;
 camera.position.y = 200;
 
 renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 window.addEventListener( 'resize', onWindowResize, false );
 renderer.setClearColor(0xeeeeee);
-const texture = new THREE.TextureLoader().load("./../textures/téléchargement.jpg");
+
+const params = {
+  Torches: true,
+};
+
+
+const gui = new GUI();
+gui.add(params, 'Torches').name('Activer torches')
+
+const TorcheLight = []
 
 init();
 animate();
@@ -52,8 +65,8 @@ async function init () {
 
   
   const GreatDoor = new THREE.Group()
-const svgLoaded = [await loadFromSVG('./../SVG/toit.svg', './../textures/toit.jpg', 0.001, 0, 1728.5, 0, 1450, 0, 90, 0),
-await loadFromSVG('./../SVG/porte.svg', './../textures/wall.jpg', 0.001, 0, 800, 0, 300, 0, 0, 0)
+const svgLoaded = [await loadFromSVG('./SVG/toit.svg', './textures/toit.jpg', 0.001, 0, 1728.5, 0, 1450, 0, 90, 0),
+await loadFromSVG('./SVG/porte.svg', './textures/wall.jpg', 0.001, 0, 800, 0, 300, 0, 0, 0)
 ]
 
 const home = createHome()
@@ -70,9 +83,11 @@ svgLoaded.forEach((tower) => {
 
   Tower.push(createTower(250 ,1000,350))
   Tower.push(createTower(250 ,1000,350))
+
   Tower.forEach((tower) => {
     scene.add(tower)
   })
+
   scene.add(tour)
   scene.add(home)
   
@@ -97,9 +112,77 @@ svgLoaded.forEach((tower) => {
   Tower[4].position.set(1200, 0, 2200)
   Tower[5].position.set(2400, 0, 2200)
 
-  scene.add(buildGround());
+  const light = new THREE.AmbientLight( 0x404040, 0.8 ); // soft white light
+  scene.add( light );
+
+  const Trees = createTree(5)
+
+
+  Trees.forEach((tree) => {
+    scene.add(tree)
+  })
+
+  console.log(Trees[0])
+  Trees[0].position.set(500, 0, 500)
+  Trees[1].position.set(2500, 0, 1500)
+  Trees[2].position.set(2000, 0, 1000)
+  Trees[3].position.set(500, 0, 1800)
+  Trees[4].position.set(3000, 0, 500)
+
+
+  const Torches = []
+  
+  Torches.push(createTorche(15, 15, 50, TorcheLight), 
+  createTorche(15, 15, 50, TorcheLight), 
+  createTorche(15, 15, 50, TorcheLight), 
+  createTorche(15, 15, 50, TorcheLight), 
+  createTorche(15, 15, 50, TorcheLight))
+
+  Torches[0].position.set(255,250,255)
+  Torches[0].rotateY(THREE.Math.degToRad(45))
+
+  Torches[1].position.set(140,250,1970)
+  Torches[1].rotateY(THREE.Math.degToRad(45))
+
+  Torches[2].position.set(3350,250,1970)
+  Torches[2].rotateY(THREE.Math.degToRad(45))
+
+  Torches[3].position.set(3200,250,280)
+  Torches[3].rotateY(THREE.Math.degToRad(45))
+
+  Torches[4].position.set(2510,250,1900)
+
+  Torches.forEach((torche) => {
+    scene.add(torche)
+  })
+
+  //scene.add(buildGround());
+  scene.add(buildSkyBox());
 }
 
+function animate() {
+  if (params.Torches) {
+    TorcheLight.forEach((light) => {
+      if (Math.random() > 0.5) {
+        if (light.intensity > 1) {
+          light.intensity = light.intensity - 0.1
+        }
+      } else {
+        if (light.intensity < 5) {
+          light.intensity = light.intensity + 0.1
+        }
+      }
+      
+    })
+  } else {
+    TorcheLight.forEach((light) => {
+      light.intensity = 0
+    })
+  }
+  requestAnimationFrame(animate);
+
+  renderer.render(scene, camera);
+}
 
 
 // texturee = new THREE.TextureLoader().load( 'textures/pierre.jpg' ); //mur
@@ -117,9 +200,66 @@ svgLoaded.forEach((tower) => {
   / / /  __/ /__/ / / / / / / / /__/ /_/ / /  / __/ /_/ / / / / /__/ /_/ / /_/ / / / (__  )
  /_/  \___/\___/_/ /_/_/ /_/_/\___/\__,_/_/  /_/  \__,_/_/ /_/\___/\__/_/\____/_/ /_/____/
  */
+ 
+function buildSkyBox(){
+
+  let materialArray = [];
+
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_ft.jpg') }));
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_bk.jpg') }));
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_up.jpg') }));
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_dn.jpg') }));
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_rt.jpg') }));
+  materialArray.push(new THREE.MeshBasicMaterial( { map: new THREE.TextureLoader().load( './textures/cocoa_lf.jpg') }));
+
+  for (let i = 0; i < 6; i++)
+      materialArray[i].side = THREE.BackSide;
+
+  let skyboxGeo = new THREE.BoxBufferGeometry( 100000, 100000, 100000);
+  let ground = new THREE.Mesh(skyboxGeo, materialArray);
+
+  ground.position.setY(3000);
+
+  return ground;
+}
+
+const createTorche = (x, y, height, groupLight) => {
+  const group = new THREE.Group()
+  
+  let torche = new THREE.BoxGeometry( x, height, y );
+  const texture = getTexture("./textures/wall.jpg", 1)
+  torche = new THREE.Mesh( torche, texture);
+
+  torche.position.y = height/2
+
+  const sphere = new THREE.SphereBufferGeometry( 8, 16, 8 );
+  const spotLight = new THREE.PointLight( 0xfa9947 );
+   spotLight.penumbra = 0.01;
+   spotLight.decay = 2;
+   spotLight.distance = 1000;
+   spotLight.intensity = 4;
+
+  spotLight.castShadow = true;
+  spotLight.shadow.mapSize.width = 128;
+  spotLight.shadow.mapSize.height = 128;
+  spotLight.shadow.camera.near = 0.5;
+  spotLight.shadow.camera.far = 1000;
+  spotLight.shadow.focus = 0.1;
+
+  spotLight.position.set(0, height+10, 0)
+
+  spotLight.add(new THREE.Mesh( sphere, new THREE.MeshPhongMaterial( { color: 0xfa9947 } ) ) )
+  groupLight.push(spotLight)
+  group.add( spotLight );
+
+  group.add(torche);
+
+  return group
+}
+
 const createStairs = () => {
   let group = new THREE.Group()
-  const texture = getTexture('./../textures/crate.gif', 1)
+  const texture = getTexture('./textures/crate.gif', 1)
 
   let x= - 200;
   let hauteur = -1100;
@@ -154,17 +294,19 @@ const createStairs = () => {
 
 const createDoor = () => {
   var geometrydoor = new THREE.BoxBufferGeometry( 100, 120, 1 );
-  return new THREE.Mesh( geometrydoor , getTexture('./../textures/porte.jpg', 1) );
+  const mesh = new THREE.Mesh( geometrydoor , getTexture('./textures/porte.jpg', 1) );
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  return mesh
   
 } 
 
 const createWindow = () => {
   let group = new THREE.Group() 
   let geometrywindow = new THREE.BoxBufferGeometry( 100, 70, 1 );
-  let windows = new THREE.Mesh( geometrywindow, getTexture('./../textures/window.jpg', 1) );
+  let windows = new THREE.Mesh( geometrywindow, getTexture('./textures/window.jpg', 1) );
   let x = 500;
   let y = 350;
-  let z = 702;
 
   for(let i = 0; i < 2; i++){
 
@@ -194,12 +336,12 @@ function createHome () {
   const geometry = new THREE.BoxGeometry( 1400, 600, 700 );
 
 
-  let box = new THREE.Mesh( geometry, getTexture('./../textures/mur.jpg', 1));
+  let box = new THREE.Mesh( geometry, getTexture('./textures/mur.jpg', 1));
   box.position.set(0,300,0)
   group.add(box)
 
   var geometryboxe = new THREE.BoxGeometry( 1400, 475, 30 );
-  let roof1 = new THREE.Mesh( geometryboxe, getTexture('./../textures/mur.jpg', 1) );
+  let roof1 = new THREE.Mesh( geometryboxe, getTexture('./textures/mur.jpg', 1) );
   roof1.position.set(0 , 700 , 175.5 - 350);
   roof1.rotateX(THREE.Math.degToRad(52));
 
@@ -212,10 +354,27 @@ function createHome () {
   windows.position.set(0, 600 - 250, 350)
 
   let stairs = createStairs()
-  stairs.position.set(100, 550, 350)
+  stairs.position.set(100, 550, 375)
 
   let door = createDoor()
   door.position.set(-350, 430, 350)
+
+
+
+  roof2.castShadow = true;
+  roof2.receiveShadow = true;
+
+  roof1.castShadow = true;
+  roof1.receiveShadow = true;
+
+  windows.castShadow = true;
+  windows.receiveShadow = true;
+
+  stairs.receiveShadow = true;
+  stairs.castShadow = true;
+
+  door.receiveShadow = true;
+  door.castShadow = true;
 
   group.add(door)
   group.add(stairs)
@@ -223,12 +382,6 @@ function createHome () {
   group.add(roof1)
   group.add(roof2)
   return group
-}
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  renderer.render(scene, camera);
 }
 
 function onWindowResize() {
@@ -245,47 +398,163 @@ function getTexture(path, ratio){
   loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping;
   loadedTexture.repeat.set( ratio, ratio );
 
-  return new THREE.MeshBasicMaterial( {map: loadedTexture } )
+  return new THREE.MeshPhongMaterial( {map: loadedTexture, flatShading: true } )
 }
 
 function buildGround(){
-  let GroundMaterial = getTexture('./../textures/sol.jpg', 1);
+  let GroundMaterial = getTexture('./textures/sol.jpg', 5);
 
 
   let GroundGeometry = new THREE.PlaneBufferGeometry(10000, 10000, 10000);
 
 
   let ground = new THREE.Mesh(GroundGeometry, GroundMaterial);
+  ground.receiveShadow = true;
   ground.material.side = THREE.DoubleSide;
   ground.position.set(0 ,0,0);
   ground.rotateX(THREE.Math.degToRad(90));
   return ground;
 }
 
+function createTronc(x, y, z, size, height){
+
+  const textureT = new THREE.TextureLoader().load( './textures/tronc.jpg' ); //tronc
+
+  //tronc
+  const geometryT = new THREE.CylinderBufferGeometry( size, 50, height, 50 );
+  const materialT = new THREE.MeshPhongMaterial( { map: textureT} );
+  const tronc = new THREE.Mesh( geometryT, materialT );
+  tronc.receiveShadow = true;
+  tronc.castShadow = true;
+  tronc.position.set(x,y,z);
+  scene.add( tronc );
+
+  return tronc;
+
+}
+
+function createGuirlande(x, y, z, nb, size){
+
+  let materialG;
+  const group = new THREE.Group()
+
+  y = ( y - 500 ) / 4 ;
+
+  for(let j = 0; j < nb ; j++){
+
+      const geometryG = new THREE.TorusKnotBufferGeometry( size, 2, 400, 50, 7, 1 );
+
+      var color = getRandomInt(nb);
+
+      if( color <= (nb/3)){
+          materialG = new THREE.MeshPhongMaterial( { color: 0xFF2D00, emissive:  0xFF2D00 } );
+      } else if( color <= (nb/3 + nb/3)){
+          materialG = new THREE.MeshPhongMaterial( { color: 0xffff00, emissive:  0xffff00 } );
+      } else {
+          materialG = new THREE.MeshPhongMaterial( { color: 0x46A7EA, emissive:  0x46A7EA } );
+      }
+
+      var guirlande = new THREE.Mesh( geometryG, materialG );
+      guirlande.rotateX(THREE.Math.degToRad(90));
+
+      guirlande.castShadow = true;
+
+      guirlande.position.set(x,y,z);
+      group.add( guirlande );
+
+
+      y += 90;
+      size -=20;
+
+
+      if(j == nb - 1){
+        const light = new THREE.PointLight( 0xffff00, 2, 200 );
+        light.position.set( x, y, z );
+        group.add( light );
+      }
+  }
+
+  return group;
+}
+function createTree(number) {
+  const Trees = []
+  for(let i = 0; i<number; i++) {
+    let tree = new THREE.Group();
+    const branches = createbranch(0, 200, 0)
+    branches.position.y = 120
+    const tronc = createTronc(0, 25, 0, 50, 120)
+    tronc.position.y = 60
+    const guirlande = createGuirlande(0, 1200, 0, 6, 110)
+    tree.add( branches );
+    tree.add( tronc );
+    tree.add( guirlande );
+    Trees.push(tree)
+  }
+  return Trees
+}
+
+function createbranch(y){
+  //textures
+  const textureB = new THREE.TextureLoader().load( './textures/branch.jpg' ); 
+  //branches de l'arbre
+  var materialB = new THREE.MeshPhongMaterial( { map: textureB, dithering: true} );
+
+  const group = new THREE.Group()
+
+  let radius = 200;
+  let height = 200;
+
+  for(let i = 0; i < 10 ; i++){
+
+      y += 100;
+      height -= 15;
+
+      const geometryB = new THREE.ConeBufferGeometry( radius, height, 15 );
+      var branch = new THREE.Mesh( geometryB, materialB );
+      branch.castShadow = true;
+      branch.receiveShadow = true;
+
+      branch.position.set(0,y/2,0);
+      group.add(branch);
+
+      radius -= 20;
+
+  }
+  return group
+}
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * Math.floor(max));
+}
 
 function createWall(largeur, longeur, hauteur, nbCrenaux, hauteurCreneaux) {
 
   const tailleCreneaux = longeur / nbCrenaux
 
-  const texture = getTexture("./../textures/wall.jpg", 1)
+  const texture = getTexture("./textures/wall.jpg", 1)
   let mur = new THREE.Group()
   let geometry = new THREE.BoxBufferGeometry(largeur/3, hauteurCreneaux, tailleCreneaux);
   for (let i = 0; i<nbCrenaux; i++){
     
     let creneaux = new THREE.Mesh(geometry, texture)
+    creneaux.receiveShadow = true;
+    creneaux.castShadow = true;
     creneaux.position.set(-largeur/3 , hauteur / 2 + hauteurCreneaux / 2, (tailleCreneaux * i) - longeur / 2)
     i++
     mur.add(creneaux)
   }
   geometry = new THREE.BoxBufferGeometry(largeur, hauteur, longeur);
 
-  mur.add(new THREE.Mesh(geometry, texture))
+  const murbase = new THREE.Mesh(geometry, texture)
+  murbase.receiveShadow = true;
+  murbase.castShadow = true;
+
+  mur.add(murbase)
+
   return mur
 }
 
 function BigTower(){
-  var material = new THREE.MeshBasicMaterial({ map: texture });
-
   let Bigtower_level_1_Geometry = new THREE.CylinderBufferGeometry(400, 400, 1600, 60);
   let Bigtower_level_2_Geometry = new THREE.CylinderBufferGeometry(600, 400, 200, 60);
   let Bigtower_level_3_Geometry = new THREE.CylinderBufferGeometry(600, 600, 500, 60);
@@ -293,11 +562,11 @@ function BigTower(){
   let Bigtower_level_5_Geometry=  new THREE.ConeBufferGeometry(200, 200, 60);
 
   
-  let Bigtower_level_1 = new THREE.Mesh(Bigtower_level_1_Geometry, getTexture("./../textures/wall.jpg", 1));
-  let Bigtower_level_2 = new THREE.Mesh(Bigtower_level_2_Geometry, getTexture("./../textures/crate.gif", 1));
-  let Bigtower_level_3 = new THREE.Mesh(Bigtower_level_3_Geometry, getTexture("./../textures/toit.jpg", 2));
-  let Bigtower_level_4 = new THREE.Mesh(Bigtower_level_4_Geometry, getTexture("./../textures/toit.jpg", 2));
-  let Bigtower_level_5 = new THREE.Mesh(Bigtower_level_5_Geometry, getTexture("./../textures/wall.jpg", 1));
+  let Bigtower_level_1 = new THREE.Mesh(Bigtower_level_1_Geometry, getTexture("./textures/wall.jpg", 1));
+  let Bigtower_level_2 = new THREE.Mesh(Bigtower_level_2_Geometry, getTexture("./textures/crate.gif", 1));
+  let Bigtower_level_3 = new THREE.Mesh(Bigtower_level_3_Geometry, getTexture("./textures/toit.jpg", 2));
+  let Bigtower_level_4 = new THREE.Mesh(Bigtower_level_4_Geometry, getTexture("./textures/toit.jpg", 2));
+  let Bigtower_level_5 = new THREE.Mesh(Bigtower_level_5_Geometry, getTexture("./textures/wall.jpg", 1));
 
   Bigtower_level_1.position.setY(800);
   Bigtower_level_2.position.setY(2100-400);
@@ -318,16 +587,22 @@ function BigTower(){
 function createTower(largeur, hauteurCylindre, hauteurCone) {
   
 
-  let geometry = new THREE.CylinderGeometry(largeur, largeur, hauteurCylindre, 100);
-  let cylindre = new THREE.Mesh(geometry, getTexture("./../textures/wall.jpg", 1));
+  let geometry = new THREE.CylinderGeometry(largeur, largeur, hauteurCylindre, 60);
+  let cylindre = new THREE.Mesh(geometry, getTexture("./textures/wall.jpg", 1));
 
   geometry = new THREE.ConeGeometry(largeur, hauteurCone, 60);
-  let cone = new THREE.Mesh(geometry, getTexture("./../textures/toit.jpg", 1));
+  let cone = new THREE.Mesh(geometry, getTexture("./textures/toit.jpg", 1));
 
   cylindre.position.y = hauteurCylindre/2;
   cone.position.y = hauteurCylindre + hauteurCone/2 ;
 
   let group = new THREE.Group()
+
+  cylindre.receiveShadow = true;
+  cylindre.castShadow = true;
+
+  cone.receiveShadow = true;
+  cone.castShadow = true;
 
   group.add(cylindre);
   group.add(cone);
@@ -367,6 +642,9 @@ async function loadFromSVG(path, texture, ratio, x, y, z, depth, rotX, rotY, rot
               obj.rotateX(THREE.Math.degToRad(rotX));
               obj.rotateY(THREE.Math.degToRad(rotY));
               obj.rotateZ(THREE.Math.degToRad(rotZ));
+              obj.receiveShadow = true;
+              obj.castShadow = true;
+            
 
               resolve(obj);
 
@@ -377,5 +655,5 @@ async function loadFromSVG(path, texture, ratio, x, y, z, depth, rotX, rotY, rot
 }
 
 var controls = new OrbitControls( camera, renderer.domElement );
-controls.minDistance = 50;
+controls.minDistance = 1;
 controls.maxDistance = 10000;
