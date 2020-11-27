@@ -1,9 +1,18 @@
-import * as THREE from "./three.js-master/build/three.module.js";
-import { OrbitControls } from './three.js-master/examples/jsm/controls/OrbitControls.js';
-import { GUI } from './three.js-master/examples/jsm/libs/dat.gui.module.js';
-import {SVGLoader} from "./three.js-master/examples/jsm/loaders/SVGLoader.js";
+import * as THREE from "../js/three.js-master/build/three.module.js";
+import { OrbitControls } from '../js/three.js-master/examples/jsm/controls/OrbitControls.js';
+import { GUI } from '../js/three.js-master/examples/jsm/libs/dat.gui.module.js';
+import {SVGLoader} from "../js/three.js-master/examples/jsm/loaders/SVGLoader.js";
+import {GLTFLoader} from "../js/three.js-master/examples/jsm/loaders/GLTFLoader.js";
+import Stats from "../js/three.js-master/examples/jsm/libs/stats.module.js";
 
-var camera, scene, renderer;
+let camera, scene, renderer, mixer, stats = new Stats(), sound, volume = 0.1;
+let sunHelper, torchesHelpers = [];
+let propellerList = [], propellerSpeed = 0.1, ambientLight, ambientLightIntensity = 0.8;
+const clock = new THREE.Clock();
+
+
+const container = document.createElement( 'div' );
+document.body.appendChild( container );
 
 
 scene = new THREE.Scene();
@@ -20,7 +29,7 @@ camera.position.y = 200;
 renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -29,11 +38,49 @@ renderer.setClearColor(0xeeeeee);
 
 const params = {
   Torches: true,
+  TorchesHelper: false,
+  Sun: true,
+  SunHelper: false,
+  PropellerSpeed: propellerSpeed,
+  AmbientLightIntensity: ambientLightIntensity,
+  Volume: volume,
 };
 
 
+/*
+*
+* Let's build GUI
+*
+* */
+
 const gui = new GUI();
-gui.add(params, 'Torches').name('Activer torches')
+const torchFolder = gui.addFolder("Torches");
+const sunFolder = gui.addFolder("Soleil");
+const propellerFolder = gui.addFolder("Hélices");
+const ambientFolder = gui.addFolder("Ambient light");
+const volumeFolder = gui.addFolder("Volume");
+torchFolder.add(params, 'Torches').name('Activer torches');
+torchFolder.add(params, 'TorchesHelper').name('Afficher helper des torches');
+sunFolder.add(params, 'Sun').name('Activer le soleil');
+sunFolder.add(params, 'SunHelper').name('Afficher helper du soleil');
+propellerFolder.add(params, "PropellerSpeed", 0, 1).onChange( function ( val ) {
+
+  propellerSpeed = val;
+
+} );
+ambientFolder.add(params, "AmbientLightIntensity", 0, 1).onChange( function ( val ) {
+
+  ambientLight.intensity = val;
+
+} );
+
+volumeFolder.add(params, "Volume", 0, 1).onChange( function ( val ) {
+
+  volume = val;
+
+} );
+
+
 
 const TorcheLight = []
 
@@ -41,11 +88,17 @@ init();
 animate();
 
 async function init () {
-  
 
+  // Place light and music
+  scene.add(buildLight(30000, 15000, -17500));
+  ambientLight = new THREE.AmbientLight( 0x404040, ambientLightIntensity ); // soft white light
+  scene.add( ambientLight );
+  setupMusic();
+
+  // Create castle
   let Murs = []
   let Tower = []
-  
+
   Tower.push(createTower(350 ,1000,350))
   Tower.push(createTower(180,600,250))
   Tower.push(BigTower())
@@ -55,32 +108,29 @@ async function init () {
   Murs.push(createWall(100,2000,600, 20, 50))
   Murs.push(createWall(100,3000,600, 40, 50))
   Murs.push(createWall(100,1000,600, 10, 50))
-  
+
   let tour = new THREE.Group()
-  
+
   Murs.forEach((elem) => {
     tour.add(elem);
   })
-  
 
-  
   const GreatDoor = new THREE.Group()
-const svgLoaded = [await loadFromSVG('./SVG/toit.svg', './textures/toit.jpg', 0.001, 0, 1728.5, 0, 1450, 0, 90, 0),
-await loadFromSVG('./SVG/porte.svg', './textures/wall.jpg', 0.001, 0, 800, 0, 300, 0, 0, 0)
-]
+  const svgLoaded = [await loadFromSVG('./SVG/toit.svg', './textures/toit.jpg', 0.001, 0, 1728.5, 0, 1450, 0, 90, 0),
+  await loadFromSVG('./SVG/porte.svg', './textures/wall.jpg', 0.001, 0, 800, 0, 300, 0, 0, 0)
+  ]
 
-const home = createHome()
-home.position.set(1000 + 700, 0, 350)
-svgLoaded.forEach((tower) => {
-  GreatDoor.add(tower)
-})
+  const home = createHome()
+  home.position.set(1000 + 700, 0, 350)
+  svgLoaded.forEach((tower) => {
+    GreatDoor.add(tower)
+  })
   GreatDoor.scale.y = 0.70
   GreatDoor.position.set(1800, 0, 2000)
   scene.add(GreatDoor)
 
 
   // build the gate's towers
-
   Tower.push(createTower(250 ,1000,350))
   Tower.push(createTower(250 ,1000,350))
 
@@ -90,20 +140,20 @@ svgLoaded.forEach((tower) => {
 
   scene.add(tour)
   scene.add(home)
-  
+
   Murs[0].position.set(0, 300, 2000 / 2 + 170 / 2)
   Murs[1].position.set(500, 300, 2000 + 180/2)
   Murs[1].rotateY(THREE.Math.degToRad(90))
-  
+
   Murs[2].position.set(3500, 300, 2000/2 + 170/2)
   Murs[2].rotateY(THREE.Math.degToRad(180))
-  
+
   Murs[3].position.set(3500/2, 300, 0)
   Murs[3].rotateY(THREE.Math.degToRad(-90))
-  
+
   Murs[4].position.set(3500 - 1000/2, 300, 2000 + 180/2)
   Murs[4].rotateY(THREE.Math.degToRad(90))
-  
+
   Tower[1].position.z = 2000 + 180/2;
   Tower[2].position.setX(3500)
   Tower[3].position.setX(3500)
@@ -112,17 +162,25 @@ svgLoaded.forEach((tower) => {
   Tower[4].position.set(1200, 0, 2200)
   Tower[5].position.set(2400, 0, 2200)
 
-  const light = new THREE.AmbientLight( 0x404040, 0.8 ); // soft white light
-  scene.add( light );
 
+  //Build drake
+  buildDrake(1750, 800, 4300, 50);
+
+  //Build propellers
+  buildPropeller(0, 0, 0, 350, 180);
+  buildPropeller(0, 0, 2000 + 180/2, 350, 180);
+  buildPropeller(3500, 0, 0, 350, 180);
+  buildPropeller(3500, 0, 2000 + 180/2, 350, 180);
+  buildPropeller(1750, 0, 1045, 600, 300);
+
+
+  // Create and place trees
   const Trees = createTree(5)
-
 
   Trees.forEach((tree) => {
     scene.add(tree)
   })
 
-  console.log(Trees[0])
   Trees[0].position.set(500, 0, 500)
   Trees[1].position.set(2500, 0, 1500)
   Trees[2].position.set(2000, 0, 1000)
@@ -130,12 +188,14 @@ svgLoaded.forEach((tower) => {
   Trees[4].position.set(3000, 0, 500)
 
 
+
+  // Create and place torches
   const Torches = []
-  
-  Torches.push(createTorche(15, 15, 50, TorcheLight), 
-  createTorche(15, 15, 50, TorcheLight), 
-  createTorche(15, 15, 50, TorcheLight), 
-  createTorche(15, 15, 50, TorcheLight), 
+
+  Torches.push(createTorche(15, 15, 50, TorcheLight),
+  createTorche(15, 15, 50, TorcheLight),
+  createTorche(15, 15, 50, TorcheLight),
+  createTorche(15, 15, 50, TorcheLight),
   createTorche(15, 15, 50, TorcheLight))
 
   Torches[0].position.set(255,250,255)
@@ -156,11 +216,16 @@ svgLoaded.forEach((tower) => {
     scene.add(torche)
   })
 
-  //scene.add(buildGround());
+  //Build Sky and castle ground
+  scene.add(buildGround());
   scene.add(buildSkyBox());
 }
 
 function animate() {
+
+  requestAnimationFrame(animate);
+
+  // update torches light
   if (params.Torches) {
     TorcheLight.forEach((light) => {
       if (Math.random() > 0.5) {
@@ -172,25 +237,60 @@ function animate() {
           light.intensity = light.intensity + 0.1
         }
       }
-      
+
     })
   } else {
     TorcheLight.forEach((light) => {
       light.intensity = 0
     })
   }
-  requestAnimationFrame(animate);
+
+  // show torches helper
+  if(params.TorchesHelper){
+    torchesHelpers.forEach((helper) =>{
+      if(helper.parent !== scene)
+        scene.add(helper);
+    })
+  }else{
+    torchesHelpers.forEach((helper) =>{
+      if(helper.parent === scene)
+        scene.remove(helper);
+    })
+  }
+
+  // update sun light
+  if(params.Sun)
+    scene.getObjectByName("sun").intensity = 0.8;
+  else
+    scene.getObjectByName("sun").intensity = 0;
+
+  // update sun helper
+  if(params.SunHelper){
+    if(scene.getObjectByName("sunHelper") == null)
+      scene.add(sunHelper);
+  }else{
+    if(scene.getObjectByName("sunHelper") != null)
+      scene.remove(sunHelper);
+  }
+
+  // update propellers speed
+  propellerList.forEach((propeller) => {
+    propeller.rotateX(propellerSpeed);
+  })
+
+  // update music volume
+  sound.setVolume(volume);
+
+  // update FPS
+  stats.update();
+  container.appendChild( stats.dom );
+
+  // update drake animation
+  const delta = clock.getDelta();
+  if ( mixer ) mixer.update( delta );
 
   renderer.render(scene, camera);
 }
-
-
-// texturee = new THREE.TextureLoader().load( 'textures/pierre.jpg' ); //mur
-// textureWindows = new THREE.TextureLoader().load( 'textures/window.jpg' ); //fenetres
-// textureWall = new THREE.TextureLoader().load( 'textures/wall.jpg' ); //mur maison
-// var toit = new THREE.TextureLoader().load( 'textures/toit.jpg' ); // toit
-// var escalier = new THREE.TextureLoader().load( 'textures/escalier.jpg' ); //escalier
-// var tdoor = new THREE.TextureLoader().load( 'textures/porte.jpg' ); //porte
 
 
 /*
@@ -200,7 +300,17 @@ function animate() {
   / / /  __/ /__/ / / / / / / / /__/ /_/ / /  / __/ /_/ / / / / /__/ /_/ / /_/ / / / (__  )
  /_/  \___/\___/_/ /_/_/ /_/_/\___/\__,_/_/  /_/  \__,_/_/ /_/\___/\__/_/\____/_/ /_/____/
  */
- 
+
+function onWindowResize() {
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize( window.innerWidth, window.innerHeight );
+
+}
+
+// Build skybox
 function buildSkyBox(){
 
   let materialArray = [];
@@ -223,9 +333,10 @@ function buildSkyBox(){
   return ground;
 }
 
+// Torch creation function
 const createTorche = (x, y, height, groupLight) => {
   const group = new THREE.Group()
-  
+
   let torche = new THREE.BoxGeometry( x, height, y );
   const texture = getTexture("./textures/wall.jpg", 1)
   torche = new THREE.Mesh( torche, texture);
@@ -246,10 +357,13 @@ const createTorche = (x, y, height, groupLight) => {
   spotLight.shadow.camera.far = 1000;
   spotLight.shadow.focus = 0.1;
 
-  spotLight.position.set(0, height+10, 0)
+  spotLight.position.set(0, height+10, 0);
 
-  spotLight.add(new THREE.Mesh( sphere, new THREE.MeshPhongMaterial( { color: 0xfa9947 } ) ) )
-  groupLight.push(spotLight)
+  spotLight.add(new THREE.Mesh( sphere, new THREE.MeshPhongMaterial( { color: 0xfa9947 } ) ) );
+
+  torchesHelpers.push(new THREE.PointLightHelper( spotLight, 100));
+
+  groupLight.push(spotLight);
   group.add( spotLight );
 
   group.add(torche);
@@ -257,6 +371,7 @@ const createTorche = (x, y, height, groupLight) => {
   return group
 }
 
+// Stairs creation function
 const createStairs = () => {
   let group = new THREE.Group()
   const texture = getTexture('./textures/crate.gif', 1)
@@ -274,37 +389,40 @@ const createStairs = () => {
 
         x+=50;
 
-        var geometryc = new THREE.BoxGeometry( 150, 30*i, 50 );
-        var boxeclone = new THREE.Mesh( geometryc, texture);
+        let geometryC = new THREE.BoxGeometry( 150, 30*i, 50 );
+        let boxClone = new THREE.Mesh( geometryC, texture);
 
-        boxeclone.position.set(-x,hauteur/2,0);
-        group.add(boxeclone);
+        boxClone.position.set(-x,hauteur/2,0);
+        group.add(boxClone);
       }else {
 
-        var geometryc = new THREE.BoxGeometry( 50, 30*i, 50 );
-        var boxeclone = new THREE.Mesh( geometryc, texture);
+        let geometryC = new THREE.BoxGeometry( 50, 30*i, 50 );
+        let boxClone = new THREE.Mesh( geometryC, texture);
 
-        boxeclone.position.set(-x,hauteur/2,0);
-        group.add(boxeclone);
+        boxClone.position.set(-x,hauteur/2,0);
+        group.add(boxClone);
       }
   }
 
   return group
 }
 
+// Door creation function
 const createDoor = () => {
-  var geometrydoor = new THREE.BoxBufferGeometry( 100, 120, 1 );
-  const mesh = new THREE.Mesh( geometrydoor , getTexture('./textures/porte.jpg', 1) );
+  let geometryDoor = new THREE.BoxBufferGeometry( 100, 120, 1 );
+  const mesh = new THREE.Mesh( geometryDoor , getTexture('./textures/porte.jpg', 1) );
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   return mesh
-  
-} 
 
+}
+
+
+// Windows creation function
 const createWindow = () => {
-  let group = new THREE.Group() 
-  let geometrywindow = new THREE.BoxBufferGeometry( 100, 70, 1 );
-  let windows = new THREE.Mesh( geometrywindow, getTexture('./textures/window.jpg', 1) );
+  let group = new THREE.Group()
+  let geometryWindow = new THREE.BoxBufferGeometry( 100, 70, 1 );
+  let windows = new THREE.Mesh( geometryWindow, getTexture('./textures/window.jpg', 1) );
   let x = 500;
   let y = 350;
 
@@ -331,8 +449,9 @@ const createWindow = () => {
 }
 
 
+// Home creation function
 function createHome () {
-  let group = new THREE.Group() 
+  let group = new THREE.Group()
   const geometry = new THREE.BoxGeometry( 1400, 600, 700 );
 
 
@@ -340,8 +459,8 @@ function createHome () {
   box.position.set(0,300,0)
   group.add(box)
 
-  var geometryboxe = new THREE.BoxGeometry( 1400, 475, 30 );
-  let roof1 = new THREE.Mesh( geometryboxe, getTexture('./textures/mur.jpg', 1) );
+  let geometryBox = new THREE.BoxGeometry( 1400, 475, 30 );
+  let roof1 = new THREE.Mesh( geometryBox, getTexture('./textures/mur.jpg', 1) );
   roof1.position.set(0 , 700 , 175.5 - 350);
   roof1.rotateX(THREE.Math.degToRad(52));
 
@@ -349,7 +468,7 @@ function createHome () {
   roof2.position.set(0 , 700 , 540 - 350);
 
   roof2.rotateX(THREE.Math.degToRad(-104));
-  
+
   let windows = createWindow()
   windows.position.set(0, 600 - 250, 350)
 
@@ -384,12 +503,23 @@ function createHome () {
   return group
 }
 
-function onWindowResize() {
+// Music setup function
+function setupMusic(){
 
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+  const listener = new THREE.AudioListener();
+  camera.add( listener );
 
-  renderer.setSize( window.innerWidth, window.innerHeight );
+
+  sound = new THREE.Audio( listener );
+
+
+  const audioLoader = new THREE.AudioLoader();
+  audioLoader.load( './music/ost.ogg', function( buffer ) {
+    sound.setBuffer( buffer );
+    sound.setLoop( true );
+    sound.setVolume( volume );
+    sound.play();
+  });
 
 }
 
@@ -398,24 +528,105 @@ function getTexture(path, ratio){
   loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping;
   loadedTexture.repeat.set( ratio, ratio );
 
-  return new THREE.MeshPhongMaterial( {map: loadedTexture, flatShading: true } )
+  return new THREE.MeshPhongMaterial( {map: loadedTexture, flatShading: true } );
+
 }
 
+// Sun creation function
+function buildLight(X, Y, Z){
+  const pointLight = new THREE.PointLight( 0xd3b6b6, 0.8, 1000000);
+  pointLight.position.set(X, Y, Z);
+  pointLight.name = "sun";
+
+  sunHelper = new THREE.PointLightHelper( pointLight, 1000);
+  sunHelper.name = "sunHelper";
+  return pointLight;
+}
+
+// Propeller creation function
+function buildPropeller(X, Y, Z, size, baseSize) {
+  const loader = new GLTFLoader();
+
+  loader.load( './models/propeller.gltf', function ( object ) {
+
+    object.scene.scale.set(size, size, size);
+    object.scene.traverse( function ( child ) {
+      if ( child.isMesh ) {
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+      }
+
+    });
+
+    const baseGeometry = new THREE.SphereBufferGeometry(baseSize, 1000, 1000, 0, Math.PI * 2.00, 0, Math.PI * 0.5);
+
+    let base = new THREE.Mesh( baseGeometry, getTexture('./textures/propellerBase.jpg', 5));
+    base.rotateZ(THREE.Math.degToRad(180));
+    base.position.set(X, Y, Z);
+    scene.add(base);
+
+
+    object.scene.rotateZ(THREE.Math.degToRad(90));
+    object.scene.position.set(X, Y - (baseSize * 1.3), Z);
+    propellerList.push(object.scene);
+
+    scene.add(object.scene);
+  });
+
+}
+
+// Drake creation function
+function buildDrake(X, Y, Z, size){
+
+  const loader = new GLTFLoader();
+
+  loader.load( './models/drake.gltf', function ( object ) {
+
+    mixer = new THREE.AnimationMixer( object.scene );
+
+    const action = mixer.clipAction( object.animations[ 0 ] );
+    action.play();
+
+    object.scene.scale.set(size, size, size);
+    object.scene.traverse(function (child) {
+      if (child.isMesh) {
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+      }
+
+    });
+    object.scene.rotateY(THREE.Math.degToRad(180));
+    object.scene.position.set(X, Y, Z);
+    scene.add(object.scene);
+  });
+}
+
+// Ground creation function
 function buildGround(){
-  let GroundMaterial = getTexture('./textures/sol.jpg', 5);
 
+  let materialArray = [];
 
-  let GroundGeometry = new THREE.PlaneBufferGeometry(10000, 10000, 10000);
+  materialArray.push(getTexture('./textures/sol.jpg', 1));
+  materialArray.push(getTexture('./textures/sol.jpg', 1));
+  materialArray.push(getTexture('./textures/sol.jpg', 1));
+  materialArray.push(getTexture('./textures/wall.jpg', 2));
+  materialArray.push(getTexture('./textures/sol.jpg', 1));
+  materialArray.push(getTexture('./textures/sol.jpg', 1));
 
+  let GroundGeometry = new THREE.BoxBufferGeometry(3500, 0.1, 2000 + 180 / 2);
 
-  let ground = new THREE.Mesh(GroundGeometry, GroundMaterial);
+  let ground = new THREE.Mesh(GroundGeometry, materialArray);
   ground.receiveShadow = true;
-  ground.material.side = THREE.DoubleSide;
   ground.position.set(0 ,0,0);
-  ground.rotateX(THREE.Math.degToRad(90));
+  ground.position.set(3500/2, 0, (2000 + 180 / 2)/2);
   return ground;
 }
 
+// Tree's trunk creation function
 function createTronc(x, y, z, size, height){
 
   const textureT = new THREE.TextureLoader().load( './textures/tronc.jpg' ); //tronc
@@ -433,6 +644,7 @@ function createTronc(x, y, z, size, height){
 
 }
 
+// Tree's garland creation function
 function createGuirlande(x, y, z, nb, size){
 
   let materialG;
@@ -442,49 +654,51 @@ function createGuirlande(x, y, z, nb, size){
 
   for(let j = 0; j < nb ; j++){
 
-      const geometryG = new THREE.TorusKnotBufferGeometry( size, 2, 400, 50, 7, 1 );
+    const geometryG = new THREE.TorusKnotBufferGeometry( size, 2, 400, 50, 7, 1 );
 
-      var color = getRandomInt(nb);
+    var color = getRandomInt(nb);
 
-      if( color <= (nb/3)){
-          materialG = new THREE.MeshPhongMaterial( { color: 0xFF2D00, emissive:  0xFF2D00 } );
-      } else if( color <= (nb/3 + nb/3)){
-          materialG = new THREE.MeshPhongMaterial( { color: 0xffff00, emissive:  0xffff00 } );
-      } else {
-          materialG = new THREE.MeshPhongMaterial( { color: 0x46A7EA, emissive:  0x46A7EA } );
-      }
+    if( color <= (nb/3)){
+      materialG = new THREE.MeshPhongMaterial( { color: 0xFF2D00, emissive:  0xFF2D00 } );
+    } else if( color <= (nb/3 + nb/3)){
+      materialG = new THREE.MeshPhongMaterial( { color: 0xffff00, emissive:  0xffff00 } );
+    } else {
+      materialG = new THREE.MeshPhongMaterial( { color: 0x46A7EA, emissive:  0x46A7EA } );
+    }
 
-      var guirlande = new THREE.Mesh( geometryG, materialG );
-      guirlande.rotateX(THREE.Math.degToRad(90));
+    var guirlande = new THREE.Mesh( geometryG, materialG );
+    guirlande.rotateX(THREE.Math.degToRad(90));
 
-      guirlande.castShadow = true;
+    guirlande.castShadow = true;
 
-      guirlande.position.set(x,y,z);
-      group.add( guirlande );
-
-
-      y += 90;
-      size -=20;
+    guirlande.position.set(x,y,z);
+    group.add( guirlande );
 
 
-      if(j == nb - 1){
-        const light = new THREE.PointLight( 0xffff00, 2, 200 );
-        light.position.set( x, y, z );
-        group.add( light );
-      }
+    y += 90;
+    size -=20;
+
+
+    if(j == nb - 1){
+      const light = new THREE.PointLight( 0xffff00, 2, 200 );
+      light.position.set( x, y, z );
+      group.add( light );
+    }
   }
 
   return group;
 }
+
+// Tree's creation function
 function createTree(number) {
   const Trees = []
   for(let i = 0; i<number; i++) {
     let tree = new THREE.Group();
-    const branches = createbranch(0, 200, 0)
-    branches.position.y = 120
-    const tronc = createTronc(0, 25, 0, 50, 120)
-    tronc.position.y = 60
-    const guirlande = createGuirlande(0, 1200, 0, 6, 110)
+    const branches = createBranch(0);
+    branches.position.y = 120;
+    const tronc = createTronc(0, 25, 0, 50, 120);
+    tronc.position.y = 60;
+    const guirlande = createGuirlande(0, 1200, 0, 6, 110);
     tree.add( branches );
     tree.add( tronc );
     tree.add( guirlande );
@@ -493,11 +707,12 @@ function createTree(number) {
   return Trees
 }
 
-function createbranch(y){
+// Tree's branch creation function
+function createBranch(y){
   //textures
-  const textureB = new THREE.TextureLoader().load( './textures/branch.jpg' ); 
+  const textureB = new THREE.TextureLoader().load( './textures/branch.jpg' );
   //branches de l'arbre
-  var materialB = new THREE.MeshPhongMaterial( { map: textureB, dithering: true} );
+  let materialB = new THREE.MeshPhongMaterial( { map: textureB, dithering: true} );
 
   const group = new THREE.Group()
 
@@ -510,7 +725,7 @@ function createbranch(y){
       height -= 15;
 
       const geometryB = new THREE.ConeBufferGeometry( radius, height, 15 );
-      var branch = new THREE.Mesh( geometryB, materialB );
+      let branch = new THREE.Mesh( geometryB, materialB );
       branch.castShadow = true;
       branch.receiveShadow = true;
 
@@ -527,15 +742,15 @@ function getRandomInt(max) {
   return Math.floor(Math.random() * Math.floor(max));
 }
 
-function createWall(largeur, longeur, hauteur, nbCrenaux, hauteurCreneaux) {
+function createWall(largeur, longeur, hauteur, nbCreneaux, hauteurCreneaux) {
 
-  const tailleCreneaux = longeur / nbCrenaux
+  const tailleCreneaux = longeur / nbCreneaux
 
   const texture = getTexture("./textures/wall.jpg", 1)
   let mur = new THREE.Group()
   let geometry = new THREE.BoxBufferGeometry(largeur/3, hauteurCreneaux, tailleCreneaux);
-  for (let i = 0; i<nbCrenaux; i++){
-    
+  for (let i = 0; i<nbCreneaux; i++){
+
     let creneaux = new THREE.Mesh(geometry, texture)
     creneaux.receiveShadow = true;
     creneaux.castShadow = true;
@@ -545,49 +760,49 @@ function createWall(largeur, longeur, hauteur, nbCrenaux, hauteurCreneaux) {
   }
   geometry = new THREE.BoxBufferGeometry(largeur, hauteur, longeur);
 
-  const murbase = new THREE.Mesh(geometry, texture)
-  murbase.receiveShadow = true;
-  murbase.castShadow = true;
+  const murBase = new THREE.Mesh(geometry, texture)
+  murBase.receiveShadow = true;
+  murBase.castShadow = true;
 
-  mur.add(murbase)
+  mur.add(murBase)
 
   return mur
 }
 
 function BigTower(){
-  let Bigtower_level_1_Geometry = new THREE.CylinderBufferGeometry(400, 400, 1600, 60);
-  let Bigtower_level_2_Geometry = new THREE.CylinderBufferGeometry(600, 400, 200, 60);
-  let Bigtower_level_3_Geometry = new THREE.CylinderBufferGeometry(600, 600, 500, 60);
-  let Bigtower_level_4_Geometry = new THREE.CylinderBufferGeometry(200, 600, 250, 60);
-  let Bigtower_level_5_Geometry=  new THREE.ConeBufferGeometry(200, 200, 60);
+  let BigTower_level_1_Geometry = new THREE.CylinderBufferGeometry(400, 400, 1600, 100);
+  let BigTower_level_2_Geometry = new THREE.CylinderBufferGeometry(600, 400, 200, 100);
+  let BigTower_level_3_Geometry = new THREE.CylinderBufferGeometry(600, 600, 500, 100);
+  let BigTower_level_4_Geometry = new THREE.CylinderBufferGeometry(200, 600, 250, 100);
+  let BigTower_level_5_Geometry=  new THREE.ConeBufferGeometry(200, 200, 60);
 
-  
-  let Bigtower_level_1 = new THREE.Mesh(Bigtower_level_1_Geometry, getTexture("./textures/wall.jpg", 1));
-  let Bigtower_level_2 = new THREE.Mesh(Bigtower_level_2_Geometry, getTexture("./textures/crate.gif", 1));
-  let Bigtower_level_3 = new THREE.Mesh(Bigtower_level_3_Geometry, getTexture("./textures/toit.jpg", 2));
-  let Bigtower_level_4 = new THREE.Mesh(Bigtower_level_4_Geometry, getTexture("./textures/toit.jpg", 2));
-  let Bigtower_level_5 = new THREE.Mesh(Bigtower_level_5_Geometry, getTexture("./textures/wall.jpg", 1));
 
-  Bigtower_level_1.position.setY(800);
-  Bigtower_level_2.position.setY(2100-400);
-  Bigtower_level_3.position.setY(2450-400);
-  Bigtower_level_4.position.setY(2825-400);
-  Bigtower_level_5.position.setY(3050-400);
+  let BigTower_level_1 = new THREE.Mesh(BigTower_level_1_Geometry, getTexture("./textures/wall.jpg", 1));
+  let BigTower_level_2 = new THREE.Mesh(BigTower_level_2_Geometry, getTexture("./textures/crate.gif", 1));
+  let BigTower_level_3 = new THREE.Mesh(BigTower_level_3_Geometry, getTexture("./textures/toit.jpg", 2));
+  let BigTower_level_4 = new THREE.Mesh(BigTower_level_4_Geometry, getTexture("./textures/toit.jpg", 2));
+  let BigTower_level_5 = new THREE.Mesh(BigTower_level_5_Geometry, getTexture("./textures/wall.jpg", 1));
+
+  BigTower_level_1.position.setY(800);
+  BigTower_level_2.position.setY(2100-400);
+  BigTower_level_3.position.setY(2450-400);
+  BigTower_level_4.position.setY(2825-400);
+  BigTower_level_5.position.setY(3050-400);
 
   let towerPattern = new THREE.Group();
-  towerPattern.add(Bigtower_level_1);
-  towerPattern.add(Bigtower_level_2);
-  towerPattern.add(Bigtower_level_3);
-  towerPattern.add(Bigtower_level_4);
-  towerPattern.add(Bigtower_level_5);
+  towerPattern.add(BigTower_level_1);
+  towerPattern.add(BigTower_level_2);
+  towerPattern.add(BigTower_level_3);
+  towerPattern.add(BigTower_level_4);
+  towerPattern.add(BigTower_level_5);
   towerPattern.position.set(0, 0, 0);
 
   return towerPattern
 }
 function createTower(largeur, hauteurCylindre, hauteurCone) {
-  
 
-  let geometry = new THREE.CylinderGeometry(largeur, largeur, hauteurCylindre, 60);
+
+  let geometry = new THREE.CylinderGeometry(largeur, largeur, hauteurCylindre, 100);
   let cylindre = new THREE.Mesh(geometry, getTexture("./textures/wall.jpg", 1));
 
   geometry = new THREE.ConeGeometry(largeur, hauteurCone, 60);
@@ -644,16 +859,15 @@ async function loadFromSVG(path, texture, ratio, x, y, z, depth, rotX, rotY, rot
               obj.rotateZ(THREE.Math.degToRad(rotZ));
               obj.receiveShadow = true;
               obj.castShadow = true;
-            
+
 
               resolve(obj);
 
-          }
-      );
+          });
   })
   return await promise;
 }
 
-var controls = new OrbitControls( camera, renderer.domElement );
+let controls = new OrbitControls( camera, renderer.domElement );
 controls.minDistance = 1;
 controls.maxDistance = 10000;
