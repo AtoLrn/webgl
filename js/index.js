@@ -6,7 +6,7 @@ import {GLTFLoader} from "../js/three.js-master/examples/jsm/loaders/GLTFLoader.
 import Stats from "../js/three.js-master/examples/jsm/libs/stats.module.js";
 
 let camera, scene, renderer, mixer, stats = new Stats(), sound, volume = 0.1;
-let sunHelper, torchesHelpers = [];
+let sunHelper, torchesHelpers = [], ground;
 let propellerList = [], propellerSpeed = 0.1, ambientLight, ambientLightIntensity = 0.8;
 const clock = new THREE.Clock();
 
@@ -17,12 +17,7 @@ document.body.appendChild( container );
 
 scene = new THREE.Scene();
 
-camera = new THREE.PerspectiveCamera(
-  100,
-  window.innerWidth / window.innerHeight,
-  1,
-  110000
-);
+camera = new THREE.PerspectiveCamera(100, window.innerWidth / window.innerHeight, 1, 110000);
 camera.position.z = 2000;
 camera.position.y = 200;
 
@@ -90,7 +85,6 @@ animate();
 async function init () {
 
   // Place light and music
-  scene.add(buildLight(30000, 15000, -17500));
   ambientLight = new THREE.AmbientLight( 0x404040, ambientLightIntensity ); // soft white light
   scene.add( ambientLight );
   setupMusic();
@@ -164,7 +158,7 @@ async function init () {
 
 
   //Build drake
-  buildDrake(1750, 800, 4300, 50);
+  buildDrake(5300, -700, -300, 50);
 
   //Build propellers
   buildPropeller(0, 0, 0, 350, 180);
@@ -217,7 +211,9 @@ async function init () {
   })
 
   //Build Sky and castle ground
-  scene.add(buildGround());
+  ground = buildGround();
+  scene.add(ground);
+  scene.add(buildLight(30000, 15000, -17500));
   scene.add(buildSkyBox());
 }
 
@@ -256,21 +252,6 @@ function animate() {
       if(helper.parent === scene)
         scene.remove(helper);
     })
-  }
-
-  // update sun light
-  if(params.Sun)
-    scene.getObjectByName("sun").intensity = 0.8;
-  else
-    scene.getObjectByName("sun").intensity = 0;
-
-  // update sun helper
-  if(params.SunHelper){
-    if(scene.getObjectByName("sunHelper") == null)
-      scene.add(sunHelper);
-  }else{
-    if(scene.getObjectByName("sunHelper") != null)
-      scene.remove(sunHelper);
   }
 
   // update propellers speed
@@ -345,10 +326,10 @@ const createTorche = (x, y, height, groupLight) => {
 
   const sphere = new THREE.SphereBufferGeometry( 8, 16, 8 );
   const spotLight = new THREE.PointLight( 0xfa9947 );
-   spotLight.penumbra = 0.01;
-   spotLight.decay = 2;
-   spotLight.distance = 1000;
-   spotLight.intensity = 4;
+  spotLight.penumbra = 0.01;
+  spotLight.decay = 2;
+  spotLight.distance = 1000;
+  spotLight.intensity = 4;
 
   spotLight.castShadow = true;
   spotLight.shadow.mapSize.width = 128;
@@ -368,13 +349,13 @@ const createTorche = (x, y, height, groupLight) => {
 
   group.add(torche);
 
-  return group
+  return group;
 }
 
 // Stairs creation function
 const createStairs = () => {
   let group = new THREE.Group()
-  const texture = getTexture('./textures/crate.gif', 1)
+  const texture = getTexture('./textures/escalier.jpg', 0.5)
 
   let x= - 200;
   let hauteur = -1100;
@@ -528,18 +509,30 @@ function getTexture(path, ratio){
   loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping;
   loadedTexture.repeat.set( ratio, ratio );
 
-  return new THREE.MeshPhongMaterial( {map: loadedTexture, flatShading: true } );
+  return new THREE.MeshPhongMaterial( {map: loadedTexture} );
 
 }
 
 // Sun creation function
 function buildLight(X, Y, Z){
-  const pointLight = new THREE.PointLight( 0xd3b6b6, 0.8, 1000000);
+  const pointLight = new THREE.SpotLight( 0xd3b6b6, 0.8, 1000000);
   pointLight.position.set(X, Y, Z);
   pointLight.name = "sun";
+  pointLight.shadow.mapSize.width = 2048;
+  pointLight.shadow.mapSize.height = 2048;
 
-  sunHelper = new THREE.PointLightHelper( pointLight, 1000);
+  pointLight.shadow.camera.near = 200;
+  pointLight.shadow.camera.far = 1500;
+
+  pointLight.shadow.camera.fov = 40;
+
+  pointLight.target = ground;
+  pointLight.castShadow = true;
+  pointLight.shadow.bias = - 0.0001;
+
+  sunHelper = new THREE.SpotLightHelper( pointLight, 1000);
   sunHelper.name = "sunHelper";
+  scene.add(sunHelper);
   return pointLight;
 }
 
@@ -680,7 +673,7 @@ function createGuirlande(x, y, z, nb, size){
 
 
     if(j == nb - 1){
-      const light = new THREE.PointLight( 0xffff00, 2, 200 );
+      const light = new THREE.PointLight( 0xffff00, 5, 200 );
       light.position.set( x, y, z );
       group.add( light );
     }
@@ -795,10 +788,20 @@ function BigTower(){
   towerPattern.add(BigTower_level_3);
   towerPattern.add(BigTower_level_4);
   towerPattern.add(BigTower_level_5);
+  towerPattern.traverse(function (child) {
+    if (child.isMesh) {
+
+      child.castShadow = true;
+      child.receiveShadow = true;
+
+    }
+
+  });
   towerPattern.position.set(0, 0, 0);
 
   return towerPattern
 }
+
 function createTower(largeur, hauteurCylindre, hauteurCone) {
 
 
@@ -869,5 +872,4 @@ async function loadFromSVG(path, texture, ratio, x, y, z, depth, rotX, rotY, rot
 }
 
 let controls = new OrbitControls( camera, renderer.domElement );
-controls.minDistance = 1;
 controls.maxDistance = 10000;
