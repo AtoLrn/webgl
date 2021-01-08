@@ -3,12 +3,20 @@ import { OrbitControls } from '../js/three.js-master/examples/jsm/controls/Orbit
 import { GUI } from '../js/three.js-master/examples/jsm/libs/dat.gui.module.js';
 import {SVGLoader} from "../js/three.js-master/examples/jsm/loaders/SVGLoader.js";
 import {GLTFLoader} from "../js/three.js-master/examples/jsm/loaders/GLTFLoader.js";
+import { FirstPersonControls } from '../js/three.js-master/examples/jsm/controls/FirstPersonControls.js';
+//import {FBXLoader} from "../js/three.js-master/examples/jsm/loaders/FBXLoader.js";
+import { ColladaLoader } from '../js/three.js-master/examples/jsm/loaders/ColladaLoader.js';
 import Stats from "../js/three.js-master/examples/jsm/libs/stats.module.js";
+import { PositionalAudioHelper } from '../js/three.js-master/examples/jsm/helpers/PositionalAudioHelper.js';
 
-let camera, scene, renderer, mixer, stats = new Stats(), sound, volume = 0.1;
+let camera, scene, renderer, stats = new Stats(), sound, volume = 0.1, volume3 = 20;
+var controls;
+const mixers = [];
 let sunHelper, torchesHelpers = [], ground;
 let propellerList = [], propellerSpeed = 0.1, ambientLight, ambientLightIntensity = 0.8;
 const clock = new THREE.Clock();
+
+
 
 
 const container = document.createElement( 'div' );
@@ -31,6 +39,13 @@ document.body.appendChild(renderer.domElement);
 window.addEventListener( 'resize', onWindowResize, false );
 renderer.setClearColor(0xeeeeee);
 
+controls = new FirstPersonControls( camera, renderer.domElement );
+
+controls.lookSpeed = 0.1;
+controls.movementSpeed = 500;
+controls.lookVertical = true;
+
+
 const params = {
   Torches: true,
   TorchesHelper: false,
@@ -39,6 +54,8 @@ const params = {
   PropellerSpeed: propellerSpeed,
   AmbientLightIntensity: ambientLightIntensity,
   Volume: volume,
+  DragonVolume: volume3,
+
 };
 
 
@@ -54,6 +71,8 @@ const sunFolder = gui.addFolder("Soleil");
 const propellerFolder = gui.addFolder("Hélices");
 const ambientFolder = gui.addFolder("Ambient light");
 const volumeFolder = gui.addFolder("Volume");
+const volumedragon = gui.addFolder("DragonVolume");
+
 torchFolder.add(params, 'Torches').name('Activer torches');
 torchFolder.add(params, 'TorchesHelper').name('Afficher helper des torches');
 sunFolder.add(params, 'Sun').name('Activer le soleil');
@@ -74,6 +93,12 @@ volumeFolder.add(params, "Volume", 0, 1).onChange( function ( val ) {
   volume = val;
 
 } );
+volumedragon.add(params, "DragonVolume", 0, 50).onChange( function ( val ) {
+
+    volume3 = val;
+
+} );
+
 
 
 
@@ -158,8 +183,9 @@ async function init () {
 
 
   //Build drake
-  buildDrake(5300, -700, -300, 50);
-
+  buildDrake(1200, -800, 6000, 50);
+  buildBunch(250,0,1450,1.2);
+  buildModel(240,-60 ,1450,2);
   //Build propellers
   buildPropeller(0, 0, 0, 350, 180);
   buildPropeller(0, 0, 2000 + 180/2, 350, 180);
@@ -205,10 +231,24 @@ async function init () {
   Torches[3].rotateY(THREE.Math.degToRad(45))
 
   Torches[4].position.set(2510,250,1900)
+  for(let i = 0 ; i < 5; i++){
+    Torches[i].add(SetMusic('./music/feu.ogg' , 15,  true, 0.8, 180, 230,0.1));
+  }
+  Torches[4].rotateY(THREE.Math.degToRad(130));
+  Torches[3].rotateY(THREE.Math.degToRad(270));
+  Torches[2].rotateY(THREE.Math.degToRad(180));
+  Torches[1].rotateY(THREE.Math.degToRad(90));
 
   Torches.forEach((torche) => {
     scene.add(torche)
   })
+
+  //
+
+
+
+
+
 
   //Build Sky and castle ground
   ground = buildGround();
@@ -216,6 +256,9 @@ async function init () {
   scene.add(buildLight(30000, 15000, -17500));
   scene.add(buildSkyBox());
 }
+
+
+
 
 function animate() {
 
@@ -262,13 +305,21 @@ function animate() {
   // update music volume
   sound.setVolume(volume);
 
+
   // update FPS
   stats.update();
   container.appendChild( stats.dom );
 
   // update drake animation
   const delta = clock.getDelta();
-  if ( mixer ) mixer.update( delta );
+  // if ( mixer ) mixer.update( delta );
+  controls.update( delta);
+
+  for ( let i = 0; i < mixers.length; ++ i ) {
+    if ( mixers[i] ) mixers[i].update( delta );
+    // mixers[ i ].update( mixerUpdateDelta );
+  }
+
 
   renderer.render(scene, camera);
 }
@@ -503,6 +554,30 @@ function setupMusic(){
   });
 
 }
+function SetMusic (path , distance ,loop,volume2, X , Y , Z){
+  var listener = new THREE.AudioListener();
+  camera.add( listener );
+
+  var audioLoader = new THREE.AudioLoader();
+  var sound1 = new THREE.PositionalAudio( listener );
+  audioLoader.load( path , function ( buffer ) {
+
+    sound1.setBuffer( buffer );
+    sound1.setRefDistance( distance );
+    sound1.setLoop(loop);
+    sound1.setVolume(volume2);
+    sound1.play();
+
+    sound1.add( helper );
+  } );
+  sound1.setDirectionalCone( X, Y, Z );
+  const helper = new PositionalAudioHelper( sound1, 100);
+
+  return sound1 ;
+
+
+
+}
 
 function getTexture(path, ratio){
   let loadedTexture = new THREE.TextureLoader().load( path );
@@ -570,6 +645,61 @@ function buildPropeller(X, Y, Z, size, baseSize) {
 
 }
 
+//model creation function
+function buildModel (X, Y, Z, size){
+  const loader = new ColladaLoader
+
+  loader.load( './models/Sitting.dae', function ( object ) {
+
+    const mixer = new THREE.AnimationMixer( object.scene );
+    mixers.push( mixer );
+
+    const action = mixer.clipAction( object.animations[ 0 ] );
+    action.play();
+
+
+    object.scene.scale.set(size, size, size);
+    object.scene.traverse(function (child) {
+      if (child.isMesh) {
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+      }
+
+    });
+    object.scene.rotateY(THREE.Math.degToRad(90));
+    object.scene.position.set(X, Y, Z);
+    scene.add(object.scene );
+  });
+
+
+}
+//bench cration fnction
+function buildBunch (X, Y, Z, size){
+  const loader = new GLTFLoader();
+  loader.load( './models/Bench.gltf', function ( object ) {
+
+
+
+    object.scene.scale.set(size, size, size);
+    object.scene.traverse( function ( child ) {
+
+      if ( child.isMesh ) {
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+      }
+
+    } );
+    object.scene.rotateY(THREE.Math.degToRad(270));
+    object.scene.position.set(X, Y, Z);
+    scene.add( object.scene );
+
+  } );
+
+}
 // Drake creation function
 function buildDrake(X, Y, Z, size){
 
@@ -577,9 +707,11 @@ function buildDrake(X, Y, Z, size){
 
   loader.load( './models/drake.gltf', function ( object ) {
 
-    mixer = new THREE.AnimationMixer( object.scene );
+    const mixer = new THREE.AnimationMixer( object.scene );
 
     const action = mixer.clipAction( object.animations[ 0 ] );
+    mixer.timeScale = 0.5;
+    mixers.push( mixer);
     action.play();
 
     object.scene.scale.set(size, size, size);
@@ -594,6 +726,7 @@ function buildDrake(X, Y, Z, size){
     });
     object.scene.rotateY(THREE.Math.degToRad(180));
     object.scene.position.set(X, Y, Z);
+    object.scene.add(SetMusic( './music/Dragon-Fly.ogg' , 8,  true, volume3, 360, 360,0.1));
     scene.add(object.scene);
   });
 }
@@ -871,5 +1004,5 @@ async function loadFromSVG(path, texture, ratio, x, y, z, depth, rotX, rotY, rot
   return await promise;
 }
 
-let controls = new OrbitControls( camera, renderer.domElement );
-controls.maxDistance = 10000;
+// let controls = new OrbitControls( camera, renderer.domElement );
+// controls.maxDistance = 10000;
